@@ -92,6 +92,14 @@ class P3EnvConfig(EnvConfig):
     timeout: float = 1.0
 
 
+@dataclass
+class ArchitectureEnvConfig(EnvConfig):
+    env_name: str = "architecture_evolution"
+    #behavior_mode: str = "3-channel"
+    target: str = "circle"
+    batch_size: int = 4
+    debug: bool = True
+
 defaults_elm = [
     {"model": "prompt"},
     {"qd": "mapelites"},
@@ -138,6 +146,7 @@ class P3Config(BaseConfig):
     # latest run of every problem
     eval_timestamp: str = ""
     run_name: Optional[str] = None
+    batch_size = 4
 
 
 def register_configstore() -> ConfigStore:

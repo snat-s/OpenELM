@@ -22,7 +22,7 @@ class P3:
         Evaluate models on P3 dataset
         """
         self.cfg: P3Config = cfg
-
+        #print(cfg)
         # Prompt size
         if cfg.env.prompt_size == 'long':
             env_args = p3_long_init_args
@@ -58,7 +58,7 @@ class P3:
             problem['solution_preamble'] = problem['sol_header'].replace('def sol(', 'def g6(') # solution form is g6()
             if self.cfg.env.prompt_size == 'long':
                 problem['solution_preamble'] = problem['solution_preamble'] + '\n' + problem['sol_docstring']
-
+            print(vars(self))
             env = P3Problem(seed=self.seed,
                             config=self.cfg,
                             mutation_model=self.mutation_model,
@@ -162,6 +162,10 @@ class P3:
 )
 def main(cfg):
     # Run
+    #cfg['model']['seed'] = 42
+    cfg['model']['batch_size'] = 4
+    cfg['env']['batch_size'] = 4
+    
     logging.info("----------------- Config ---------------")
     logging.info(OmegaConf.to_yaml(cfg))
     logging.info("-----------------  End -----------------")

@@ -8,6 +8,7 @@ from openelm.environments.environments import (
     MatchString,
     P3Problem,
     Sodarace,
+    EvoPromptingEnv,
 )
 
 P3_MED_SEED = {
@@ -134,4 +135,5 @@ __all__ = [
     "Sodarace",
     "ENVS_DICT",
     "P3Problem",
+    "EvoPromptingEnv",
 ]

@@ -8,7 +8,7 @@ from typing import Generic, Optional, Type, TypeVar, Union
 import numpy as np
 import requests
 
-from openelm.configs import EnvConfig, ImageEnvConfig, P3EnvConfig, SodaraceEnvConfig
+from openelm.configs import EnvConfig, ImageEnvConfig, P3EnvConfig, SodaraceEnvConfig, ArchitectureEnvConfig
 from openelm.environments.env_utils import IMAGE_SEED, get_image_target
 from openelm.environments.sodaracer import (
     CIRCLE,
@@ -549,6 +549,7 @@ class P3Problem(BaseEnvironment[P3Solution]):
             solution_preamble: the g6(<params>) function definition (must be passed in in order to include params)
             ans_type: answer type
         """
+    #rint(seed)
         if isinstance(seed, dict):
             self.seed = seed
         else:
@@ -557,7 +558,7 @@ class P3Problem(BaseEnvironment[P3Solution]):
         self.problem_func = problem_func
         self.solution_preamble = solution_preamble
         self.config = config
-        self.batch_size = self.config.batch_size
+        self.batch_size = 4 # self.config.batch_size
         # The only import that's necessary as of P3 v0.2
         self.import_line = "from typing import List\n"
         self.ans_type = ans_type
@@ -639,3 +640,120 @@ class P3Problem(BaseEnvironment[P3Solution]):
 
     def to_behavior_space(self, x: Sodaracer) -> Optional[Phenotype]:
         raise NotImplementedError
+
+class Architecture(Genotype):
+    def __init__(self, program_str: str, result_obj: dict):
+        """
+        Genotype for a programming architecture.
+        
+        Args:
+            program_str: the string for the original program.
+            result_obj_ the dict of the architecture.
+        """
+        self.program_str = program_str
+        self.result_obj = result_obj
+        # Check if the Architecture is valid.
+        # TODO Implement if it is valid or not.
+        self.valid = True
+
+    def to_phenotype(self) -> Optional[Phenotype]:
+        if self.valid:
+            return Phenotype(self.result_obj)
+        else:
+            return None
+        
+    def __str__(self) -> str:
+        return self.program_str
+
+
+class EvoPromptingEnv(BaseEnvironment[Architecture]):
+    def __init__(
+            self,
+            config: ArchitectureEnvConfig,
+            mutation_model: MutationModel
+        ) -> None:
+        self.config: ArchitectureEnvConfig = config,
+        # self.genotype_space: np.ndarray Implement this later
+        self.batch_size: int = 4
+        self.mutation_model: MutationModel = mutation_model
+
+
+    def construct_prompt(self) -> dict[str, str]:
+        """
+        Create initial prompts:
+        Returns a dict with a "prompt" and "template"
+        Currently only implements one prompt
+        """
+        prompt_str: str = "from jax import nn\n"
+        instruction_str: str = """
+\"\"\"Metrics:
+{\’num_params\’: \’4800\’, \’val_accuracy\’: \’0.865\’}
+\"\"\"
+ class Model(nn.Module):
+        @nn.compact
+        def __call__(self, x):
+            x = nn.Dense(features=10)(x)
+            return x
+"""
+        import_str: str = prompt_str
+
+        import_str += instruction_str
+        prompt_str += instruction_str
+        return {"prompt": prompt_str, "template": import_str}
+
+    def generate_programs(self, code_batch: list[dict[str, str]]):
+        """Generate new programs with a mutation model and evaluate them."""
+        local_scope_exec = True # TODO add in config For now stay as true
+        generated_programs = self.mutation_model.generate_programs(
+            code_batch, local_scope_exec
+        )
+        func_name: str = "__call__"
+        # Not sure if pool_exec_processes is going to work.
+        results = pool_exec_processes(
+            generated_programs,
+            func_name=func_name,
+            timeout=self.config.timeout,
+            processes=self.config.processes,
+            debug=self.config.debug,
+        )
+        result_list: list = []
+        for i, result in enumerate(results):
+            try:
+                if isinstance(result, np.ndarray):
+                    result_list.append(
+                        {
+                        "program_str": generated_programs[i],
+                        "result_obj": result,
+                        }
+                    )
+                else:
+                    if self.debug:
+                        print("Failed execution, type:", result)
+                        print(generated_programs[i])
+            except Exception as e:
+                if self.debug:
+                    print(type(e), e)
+        return [Architecture(**p) for p in result_list]
+        
+        
+    def random(self) -> list[Architecture]:
+        program_list = [self.construct_prompt() for _ in range(self.config.batch_size)]
+        new_architectures = self.generate_programs(program_list)
+        raise new_architectures
+
+    def mutate(self, architecture_list: list[Architecture]) -> list[Architecture]:
+        """Create a mutation of the list of architectures."""
+        architecture_list = [arch.program_str for arch in architecture_list]
+        program_list = list(map(self.construct_prompt, architecture_list))
+        new_architectures = self.generate_programs(program_list)
+        return new_architectures
+    
+    def fitness(self, x: Architecture) -> float:
+        if x.valid:
+            return x.result_obj
+        else:
+            return -np.inf
+
+    #def evaluate(self, eval_ms: int) -> float:
+    #    self._fitness = self.simulator.evaluate(eval_ms)
+    #    return self._fitness

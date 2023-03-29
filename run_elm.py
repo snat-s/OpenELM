@@ -20,6 +20,11 @@ from openelm import ELM
     version_base="1.2",
 )
 def main(config):
+    print(config)
+    config['model']['seed'] = 42
+    config['model']['batch_size'] = 4
+    config['env']['batch_size'] = 4
+    print(config)
     print("----------------- Config ---------------")
     print(OmegaConf.to_yaml(config))
     print("-----------------  End -----------------")
